@@ -39,7 +39,6 @@ from diffusers.pipelines.pipeline_utils import DiffusionPipeline, StableDiffusio
 from diffusers.pipelines.stable_diffusion.pipeline_output import StableDiffusionPipelineOutput
 from diffusers.pipelines.stable_diffusion.safety_checker import StableDiffusionSafetyChecker
 
-import utils
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
@@ -341,7 +340,6 @@ class StableDiffusionPipeline(
         negative_prompt_embeds: Optional[torch.Tensor] = None,
         lora_scale: Optional[float] = None,
         clip_skip: Optional[int] = None,
-        unet_controller=None,
     ):
         r"""
         Encodes the prompt into text encoder hidden states.
@@ -371,8 +369,6 @@ class StableDiffusionPipeline(
             clip_skip (`int`, *optional*):
                 Number of layers to be skipped from CLIP while computing the prompt embeddings. A value of 1 means that
                 the output of the pre-final layer will be used for computing the prompt embeddings.
-            unet_controller: (`Optional[UNetController]`, *optional*):
-                The UNetController object to apply additional transformations to the prompt embeddings.
         """
         # set lora scale so that monkey patched LoRA
         # function of text encoder can correctly access it
@@ -439,73 +435,6 @@ class StableDiffusionPipeline(
                 # obtaining the final prompt representations passes through the LayerNorm
                 # layer.
                 prompt_embeds = self.text_encoder.text_model.final_layer_norm(prompt_embeds)
-
-            # 添加 UNetController 相关逻辑
-            if unet_controller is not None and unet_controller.frame_prompt_express is not None:
-                input_prompt_embeds = prompt_embeds.hidden_states[-2] if clip_skip is None else \
-                prompt_embeds.hidden_states[-(clip_skip + 2)]
-
-                alpha_weaken = unet_controller.Alpha_weaken
-                beta_weaken = unet_controller.Beta_weaken
-                alpha_strengthen = unet_controller.Alpha_enhance
-                beta_strengthen = unet_controller.Beta_enhance
-                frame_prompt_suppress = unet_controller.frame_prompt_suppress
-                frame_prompt_express = unet_controller.frame_prompt_express
-
-                if unet_controller.Prompt_embeds_mode == 'svr':
-                    for movement in frame_prompt_suppress:
-                        utils.swr_single_prompt_embeds(movement, input_prompt_embeds[0], prompt[0],
-                                                       unet_controller.tokenizer, alpha=alpha_weaken, beta=beta_weaken)
-                    utils.swr_single_prompt_embeds(frame_prompt_express, input_prompt_embeds[0], prompt[0],
-                                                   unet_controller.tokenizer, alpha=alpha_strengthen,
-                                                   beta=beta_strengthen)
-
-                elif unet_controller.Prompt_embeds_mode == 'svr-eot':
-                    for movement in frame_prompt_suppress:
-                        utils.swr_single_prompt_embeds(movement, input_prompt_embeds[0], prompt[0],
-                                                       unet_controller.tokenizer, alpha=alpha_weaken, beta=beta_weaken,
-                                                       zero_eot=True)
-                    utils.swr_single_prompt_embeds(frame_prompt_express, input_prompt_embeds[0], prompt[0],
-                                                   unet_controller.tokenizer, alpha=alpha_strengthen,
-                                                   beta=beta_strengthen, zero_eot=True)
-
-                elif unet_controller.Prompt_embeds_mode == "original":
-                    pass
-
-                else:
-                    raise ValueError(f"Invalid prompt embeds mode: {unet_controller.Prompt_embeds_mode}")
-
-                prompt_embeds = input_prompt_embeds
-
-            elif unet_controller is not None and unet_controller.frame_prompt_express_list is not None:
-                input_prompt_embeds = prompt_embeds.hidden_states[-2] if clip_skip is None else \
-                prompt_embeds.hidden_states[-(clip_skip + 2)]
-
-                alpha_weaken = unet_controller.Alpha_weaken
-                beta_weaken = unet_controller.Beta_weaken
-                alpha_strengthen = unet_controller.Alpha_enhance
-                beta_strengthen = unet_controller.Beta_enhance
-                frame_prompt_suppress_list = unet_controller.frame_prompt_suppress_list
-                frame_prompt_express_list = unet_controller.frame_prompt_express_list
-
-                for index, (frame_prompt_suppress, frame_prompt_express) in enumerate(
-                        zip(frame_prompt_suppress_list, frame_prompt_express_list)):
-                    if unet_controller.Prompt_embeds_mode == 'svr':
-                        for movement in frame_prompt_suppress:
-                            utils.swr_single_prompt_embeds(movement, input_prompt_embeds[index], prompt[index],
-                                                           unet_controller.tokenizer, alpha=alpha_weaken,
-                                                           beta=beta_weaken)
-                        utils.swr_single_prompt_embeds(frame_prompt_express, input_prompt_embeds[index], prompt[index],
-                                                       unet_controller.tokenizer, alpha=alpha_strengthen,
-                                                       beta=beta_strengthen)
-
-                    elif unet_controller.Prompt_embeds_mode == "original":
-                        pass
-
-                    else:
-                        raise ValueError(f"Invalid prompt embeds mode: {unet_controller.Prompt_embeds_mode}")
-
-                prompt_embeds = input_prompt_embeds
 
         if self.text_encoder is not None:
             prompt_embeds_dtype = self.text_encoder.dtype
@@ -762,7 +691,7 @@ class StableDiffusionPipeline(
                     f"`ip_adapter_image_embeds` has to be a list of 3D or 4D tensors but is {ip_adapter_image_embeds[0].ndim}D"
                 )
 
-    def prepare_latents(self, batch_size, num_channels_latents, height, width, dtype, device, generator, latents=None, same=False):
+    def prepare_latents(self, batch_size, num_channels_latents, height, width, dtype, device, generator, latents=None):
         shape = (
             batch_size,
             num_channels_latents,
@@ -782,8 +711,6 @@ class StableDiffusionPipeline(
 
         # scale the initial noise by the standard deviation required by the scheduler
         latents = latents * self.scheduler.init_noise_sigma
-        if same:
-            latents = latents.repeat(2, 1, 1, 1)
         return latents
 
     # Copied from diffusers.pipelines.latent_consistency_models.pipeline_latent_consistency_text2img.LatentConsistencyModelPipeline.get_guidance_scale_embedding
@@ -877,7 +804,6 @@ class StableDiffusionPipeline(
             Union[Callable[[int, int, Dict], None], PipelineCallback, MultiPipelineCallbacks]
         ] = None,
         callback_on_step_end_tensor_inputs: List[str] = ["latents"],
-        unet_controller=None,
         **kwargs,
     ):
         r"""
@@ -1020,20 +946,6 @@ class StableDiffusionPipeline(
         self._cross_attention_kwargs = cross_attention_kwargs
         self._interrupt = False
 
-        # 1.1 设置 unet_controller 参数
-        if unet_controller is not None:
-            if not isinstance(prompt, list):
-                prompt_ = [prompt]
-            else:
-                prompt_ = prompt
-            if not isinstance(negative_prompt, list):
-                negative_prompt_ = [negative_prompt]
-            else:
-                negative_prompt_ = negative_prompt
-            unet_controller.prompts = prompt_
-            unet_controller.negative_prompt = negative_prompt_
-            unet_controller.do_classifier_free_guidance = self.do_classifier_free_guidance
-
         # 2. Define call parameters
         if prompt is not None and isinstance(prompt, str):
             batch_size = 1
@@ -1059,7 +971,6 @@ class StableDiffusionPipeline(
             negative_prompt_embeds=negative_prompt_embeds,
             lora_scale=lora_scale,
             clip_skip=self.clip_skip,
-            unet_controller=unet_controller,
         )
 
         # For classifier free guidance, we need to do two forward passes.
@@ -1093,7 +1004,6 @@ class StableDiffusionPipeline(
             device,
             generator,
             latents,
-            same=(unet_controller.Use_same_latents if unet_controller is not None else False)
         )
 
         # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline

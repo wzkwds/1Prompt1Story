@@ -39,7 +39,6 @@ from diffusers.pipelines.pipeline_utils import DiffusionPipeline, StableDiffusio
 from diffusers.pipelines.stable_diffusion.pipeline_output import StableDiffusionPipelineOutput
 from diffusers.pipelines.stable_diffusion.safety_checker import StableDiffusionSafetyChecker
 
-import utils
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
@@ -762,7 +761,7 @@ class StableDiffusionPipeline(
                     f"`ip_adapter_image_embeds` has to be a list of 3D or 4D tensors but is {ip_adapter_image_embeds[0].ndim}D"
                 )
 
-    def prepare_latents(self, batch_size, num_channels_latents, height, width, dtype, device, generator, latents=None, same=False):
+    def prepare_latents(self, batch_size, num_channels_latents, height, width, dtype, device, generator, latents=None, same=Flase):
         shape = (
             batch_size,
             num_channels_latents,
