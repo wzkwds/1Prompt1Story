@@ -48,7 +48,7 @@ def main(device, model_path, save_dir, id_prompt, frame_prompt_list, precision, 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate images using a specific device.")
     parser.add_argument('--device', type=str, default='cuda:0', help='Device to use for computation (e.g., cuda:0, cpu)')
-    parser.add_argument('--model_path', type=str, default='playgroundai/playground-v2.5-1024px-aesthetic', help='Path to the model')
+    parser.add_argument('--model_path', type=str, default='stabilityai/stable-diffusion-xl-base-1.0', help='Path to the model')
     parser.add_argument('--project_base_path', type=str, default='.', help='Path to save the generated images')
     parser.add_argument('--id_prompt', type=str, default="A photo of a red fox with coat", help='Initial prompt for image generation')
     parser.add_argument('--frame_prompt_list', type=str, nargs='+', default=[
