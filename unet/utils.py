@@ -9,7 +9,7 @@ from transformers import (
 )
 from scipy.spatial.distance import cdist
 import numpy as np
-import unet.pipeline_stable_diffusion as pipeline_stable_diffusion
+import unet.pipeline_stable_diffusion_xl as pipeline_stable_diffusion_xl
 from torch.fft import fftn, fftshift, ifftn, ifftshift
 from typing import Optional, Tuple
 
@@ -211,7 +211,7 @@ def load_pipe_from_path(model_path, device, torch_dtype, variant):
     text_encoder_2 = CLIPTextModelWithProjection.from_pretrained(model_path, subfolder="text_encoder_2", torch_dtype=torch_dtype, variant=variant,)
     unet_new = UNet2DConditionModel.from_pretrained(model_path, subfolder="unet", torch_dtype=torch_dtype, variant=variant,)
     
-    pipe = pipeline_stable_diffusion.StableDiffusionPipeline(
+    pipe = pipeline_stable_diffusion_xl.StableDiffusionXLPipeline(
         vae=vae,
         text_encoder=text_encoder,
         text_encoder_2=text_encoder_2,
