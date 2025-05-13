@@ -57,7 +57,7 @@ from diffusers.utils.torch_utils import is_compiled_module, is_torch_version, ra
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline, StableDiffusionMixin
 from diffusers.pipelines.stable_diffusion_xl.pipeline_output import StableDiffusionXLPipelineOutput
 
-import utils
+from unet import utils
 from unet.unet_controller import UNetController
 
 if is_invisible_watermark_available():

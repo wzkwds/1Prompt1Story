@@ -242,7 +242,7 @@ def get_max_window_length(unet_controller: Optional[UNetController],id_prompt, f
     return max_window_length
 
 
-def movement_gen_story_slide_windows(id_prompt, frame_prompt_list, pipe, window_length, seed, unet_controller: Optional[UNetController], save_dir, verbose=True):  
+def movement_gen_story_slide_windows(id_prompt, frame_prompt_list, pipe, window_length, seed, unet_controller: Optional[UNetController], save_dir, verbose=True, control_image=None):
     import os
     max_window_length = get_max_window_length(unet_controller,id_prompt,frame_prompt_list)
     window_length = min(window_length,max_window_length)
@@ -283,7 +283,7 @@ def movement_gen_story_slide_windows(id_prompt, frame_prompt_list, pipe, window_
         if unet_controller is not None and unet_controller.Use_same_init_noise is True:     
             generate = torch.Generator().manual_seed(seed)
 
-        images = pipe(gen_propmts, generator=generate, unet_controller=unet_controller).images
+        images = pipe(gen_propmts, image=control_image, generator=generate, unet_controller=unet_controller).images
         story_images.append(images[0])
         images[0].save(os.path.join(save_dir, f'{id_prompt} {unet_controller.frame_prompt_express}.jpg'))
 

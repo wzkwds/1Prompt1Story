@@ -7,6 +7,7 @@ import unet.utils as utils
 from unet.unet_controller import UNetController
 import argparse
 from datetime import datetime
+from diffusers.utils import load_image
 
 diffusers.utils.logging.set_verbosity_error()
 
@@ -17,6 +18,35 @@ def load_unet_controller(pipe, device):
 
     return unet_controller
 
+from transformers import DPTImageProcessor, DPTForDepthEstimation
+
+depth_estimator = DPTForDepthEstimation.from_pretrained("Intel/dpt-hybrid-midas").to("cuda")
+feature_extractor = DPTImageProcessor.from_pretrained("Intel/dpt-hybrid-midas")
+from PIL import Image
+
+def get_depth_map(image):
+    image = feature_extractor(images=image, return_tensors="pt").pixel_values.to("cuda")
+    with torch.no_grad(), torch.autocast("cuda"):
+        depth_map = depth_estimator(image).predicted_depth
+
+    depth_map = torch.nn.functional.interpolate(
+        depth_map.unsqueeze(1),
+        size=(1024, 1024),
+        mode="bicubic",
+        align_corners=False,
+    )
+    depth_min = torch.amin(depth_map, dim=[1, 2, 3], keepdim=True)
+    depth_max = torch.amax(depth_map, dim=[1, 2, 3], keepdim=True)
+    depth_map = (depth_map - depth_min) / (depth_max - depth_min)
+    image = torch.cat([depth_map] * 3, dim=1)
+    image = image.permute(0, 2, 3, 1).cpu().numpy()[0]
+    image = Image.fromarray((image * 255.0).clip(0, 255).astype(np.uint8))
+    return image
+
+control_image = load_image(
+    "https://huggingface.co/datasets/hf-internal-testing/diffusers-images/resolve/main"
+    "/kandinsky/cat.png"
+).resize((1024, 1024))
 
 def generate_images(unet_controller: UNetController, pipe, id_prompt, frame_prompt_list, save_dir, window_length, seed, verbose=True):
     generate = torch.Generator().manual_seed(seed)
@@ -24,13 +54,14 @@ def generate_images(unet_controller: UNetController, pipe, id_prompt, frame_prom
         unet_controller.Store_qkv = True
         original_prompt_embeds_mode = unet_controller.Prompt_embeds_mode
         unet_controller.Prompt_embeds_mode = "original"
-        _ = pipe(id_prompt, generator=generate, unet_controller=unet_controller).images
+        #_ = pipe(id_prompt, generator=generate, unet_controller=unet_controller).images
+        _ = pipe(id_prompt, image=control_image, generator=generate, unet_controller=unet_controller, ).images
         unet_controller.Prompt_embeds_mode = original_prompt_embeds_mode
 
 
     unet_controller.Store_qkv = False
     images, story_image = utils.movement_gen_story_slide_windows(
-        id_prompt, frame_prompt_list, pipe, window_length, seed, unet_controller, save_dir, verbose=verbose
+        id_prompt, frame_prompt_list, pipe, window_length, seed, unet_controller, save_dir, verbose=verbose, control_image=control_image
     )
 
     return images, story_image
