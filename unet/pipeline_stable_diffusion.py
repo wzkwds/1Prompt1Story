@@ -39,7 +39,7 @@ from diffusers.pipelines.pipeline_utils import DiffusionPipeline, StableDiffusio
 from diffusers.pipelines.stable_diffusion.pipeline_output import StableDiffusionPipelineOutput
 from diffusers.pipelines.stable_diffusion.safety_checker import StableDiffusionSafetyChecker
 
-import utils
+import unet.utils as utils
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
